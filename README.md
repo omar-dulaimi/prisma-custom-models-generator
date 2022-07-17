@@ -109,10 +109,10 @@ export class Users {
 
 # Additional Options
 
-| Option     |  Description                                               | Type             |  Default      |
-| ---------- | ---------------------------------------------------------- | ---------------- | ------------- |
-| `output`   | Output directory for the generated routers and zod schemas | `string`         | `./generated` |
-| `behavior` | Sets the preferred grouping logic                          | `WRAP Or EXTEND` | `WRAP`        |
+| Option     |  Description                                               | Type               |  Default      |
+| ---------- | ---------------------------------------------------------- | ------------------ | ------------- |
+| `output`   | Output directory for the generated routers and zod schemas | `string`           | `./generated` |
+| `behavior` | Sets the preferred grouping logic                          | `WRAP` or `EXTEND` | `WRAP`        |
 
 Use additional options in the `schema.prisma`
 
