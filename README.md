@@ -4,9 +4,6 @@
 [![npm](https://img.shields.io/npm/l/prisma-custom-models-generator.svg)](LICENSE)
 
 <p align="center">
-  <a href="https://github.com/omar-dulaimi/prisma-custom-models-generator">
-    <img src="https://raw.githubusercontent.com/omar-dulaimi/prisma-custom-models-generator/master/logo.png" alt="Logo" width="200" height="200">
-  </a>
   <h3 align="center">Prisma Custom Models Generator</h3>
   <p align="center">
     A Prisma generator that automates creating custom models from your Prisma schema.
