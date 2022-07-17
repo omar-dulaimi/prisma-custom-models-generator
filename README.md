@@ -85,7 +85,7 @@ model Post {
 }
 ```
 
-will generate this for the User model
+will generate this for the User model(default behavior is `WRAP`)
 
 ```ts
 import { PrismaClient } from '@prisma/client';
