@@ -16,12 +16,6 @@
   </p>
 </p>
 
-<p align="center">
-  <a href="https://www.buymeacoffee.com/omardulaimi">
-    <img src="https://cdn.buymeacoffee.com/buttons/default-black.png" alt="Buy Me A Coffee" height="41" width="174">
-  </a>
-</p>
-
 ## Table of Contents
 
 - [About](#about)
@@ -328,4 +322,4 @@ edit survived and the result still type-checks:
 
 ## Community
 
-[![Stargazers repo roster for @omar-dulaimi/prisma-custom-models-generator](https://reporoster.com/stars/omar-dulaimi/prisma-custom-models-generator)](https://github.com/omar-dulaimi/prisma-custom-models-generator/stargazers)
+[Stargazers](https://github.com/omar-dulaimi/prisma-custom-models-generator/stargazers)
