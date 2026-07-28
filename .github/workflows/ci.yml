@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.19', '22', '24']
+    name: node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+      # The check that matters. Both defects fixed in 0.2.0 shipped for years
+      # while the steps above would have passed, because they exercise the
+      # source tree and a consumer installs a tarball. This builds the package,
+      # packs it, installs it into an empty project, runs `prisma generate`,
+      # hand-edits a scaffold, regenerates, and asserts the edit survived.
+      - name: verify the packaged artifact (prisma 7)
+        run: ./scripts/verify-package.sh
+        env:
+          PRISMA_VERSION: 7.9.1
+
+  prisma-6:
+    runs-on: ubuntu-latest
+    name: prisma 6 compatibility
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      # One codebase supports both majors because the generator reads the
+      # datamodel out of the options Prisma hands it instead of parsing the
+      # schema with its own bundled copy of Prisma.
+      - name: verify the packaged artifact (prisma 6)
+        run: ./scripts/verify-package.sh
+        env:
+          PRISMA_VERSION: 6.19.3

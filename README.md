@@ -1,14 +1,13 @@
 [![npm version](https://badge.fury.io/js/prisma-custom-models-generator.svg)](https://badge.fury.io/js/prisma-custom-models-generator)
 [![npm](https://img.shields.io/npm/dt/prisma-custom-models-generator.svg)](https://www.npmjs.com/package/prisma-custom-models-generator)
-[![HitCount](https://hits.dwyl.com/omar-dulaimi/prisma-custom-models-generator.svg?style=flat)](http://hits.dwyl.com/omar-dulaimi/prisma-custom-models-generator)
 [![npm](https://img.shields.io/npm/l/prisma-custom-models-generator.svg)](LICENSE)
 
 <p align="center">
   <h3 align="center">Prisma Custom Models Generator</h3>
   <p align="center">
-    A Prisma generator that automates creating custom models from your Prisma schema.
+    A Prisma generator that scaffolds custom models from your Prisma schema, and never overwrites the code you write into them.
     <br />
-    <a href="https://github.com/omar-dulaimi/prisma-custom-models-generator#additional-options"><strong>Explore the options »</strong></a>
+    <a href="https://github.com/omar-dulaimi/prisma-custom-models-generator#options"><strong>Explore the options »</strong></a>
     <br />
     <br />
     <a href="https://github.com/omar-dulaimi/prisma-custom-models-generator/issues/new?template=bug_report.yml">Report Bug</a>
@@ -25,70 +24,245 @@
 
 ## Table of Contents
 
-- [About The Project](#about-the-project)
+- [About](#about)
+- [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Additional Options](#additional-options)
+- [Regeneration is safe](#regeneration-is-safe)
+- [Behaviors](#behaviors)
+- [Options](#options)
+- [Development](#development)
 - [Community](#community)
 
-# About The Project
+## About
 
-Automatically generate custom models from your [Prisma](https://github.com/prisma/prisma) Schema. This includes all currently recommended ways as mentioned on [Prisma Docs](https://www.prisma.io/docs/concepts/components/prisma-client/custom-models). Updates every time `npx prisma generate` runs.
+Prisma has no way to attach your own methods to a model. This generator writes
+the boilerplate for you: one file per model, wired to the right Prisma Client
+type, ready for you to add methods to.
 
-# Installation
+Because those files are meant to be edited, the generator treats them as yours.
+Once a file exists it is never rewritten, and files it did not create are never
+touched. See [Regeneration is safe](#regeneration-is-safe).
 
-Using npm:
+Prisma documents three ways to add custom methods to a model, and this generator
+emits all three. Prisma recommends the first:
+
+| Prisma's approach | `behavior` |
+| --- | --- |
+| Client extensions (`$extends`), **recommended by Prisma** | `EXTEND_CLIENT` |
+| Wrapping a model in a class | `WRAP` |
+| Extending a model delegate with `Object.assign` | `EXTEND` |
+
+## Requirements
+
+- Node `^20.19 || ^22.12 || >=24.0`
+- Prisma 6 or 7 (verified against `7.9.1` and `6.19.3`)
+- Works with both the `prisma-client` and the legacy `prisma-client-js`
+  generator providers
+
+This generator does not bundle its own copy of Prisma. It reads the already
+parsed datamodel out of the options Prisma hands it, so it uses whatever Prisma
+version you installed.
+
+## Installation
 
 ```bash
- npm install prisma-custom-models-generator
+npm install --save-dev prisma-custom-models-generator
 ```
-
-Using yarn:
 
 ```bash
- yarn add prisma-custom-models-generator
+yarn add --dev prisma-custom-models-generator
 ```
 
-# Usage
+```bash
+pnpm add -D prisma-custom-models-generator
+```
 
-1- Star this repo 😉
+## Usage
 
-2- Add the generator to your Prisma schema
+Add the generator to your schema. `output` is where your custom model files go,
+and it should be a directory you are happy to commit, because you will be
+writing code in it.
 
 ```prisma
-generator custom_models {
-  provider       = "prisma-custom-models-generator"
-  behavior       = "WRAP"
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
-```
 
-3- Running `npx prisma generate` for the following schema.prisma
+generator custom_models {
+  provider = "prisma-custom-models-generator"
+  output   = "../src/models"
+  behavior = "EXTEND_CLIENT"
+}
 
-```prisma
+datasource db {
+  provider = "sqlite"
+}
+
 model User {
   id    Int     @id @default(autoincrement())
   email String  @unique
   name  String?
-  posts Post[]
-}
-
-model Post {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  viewCount Int      @default(0)
-  author    User?    @relation(fields: [authorId], references: [id])
-  authorId  Int?
 }
 ```
 
-will generate this for the User model(default behavior is `WRAP`)
+On Prisma 7 the connection URL lives in `prisma.config.ts`, not in the schema:
 
 ```ts
-import { PrismaClient } from '@prisma/client';
+// prisma.config.ts
+import { defineConfig } from 'prisma/config';
+
+export default defineConfig({
+  schema: 'prisma/schema.prisma',
+  datasource: { url: process.env.DATABASE_URL ?? 'file:./dev.db' },
+});
+```
+
+Then generate:
+
+```bash
+npx prisma generate
+```
+
+That writes `src/models/Users.ts`:
+
+```ts
+// Custom model scaffold generated by prisma-custom-models-generator.
+//
+// This file is yours to edit. Later `prisma generate` runs detect your
+// changes and leave the file alone; the generator only rewrites scaffolds it
+// created that are still untouched. Delete the file to get a fresh scaffold.
+
+import { Prisma } from "../generated/prisma/client";
+
+/**
+ * Custom methods for the `User` model, as a Prisma Client extension.
+ * ...
+ */
+export const UsersExtension = Prisma.defineExtension({
+  name: 'Users',
+  model: {
+    user: {
+      // define methods here, comma-separated
+    },
+  },
+});
+```
+
+Fill in your methods:
+
+```ts
+export const UsersExtension = Prisma.defineExtension({
+  name: 'Users',
+  model: {
+    user: {
+      async findByEmail(email: string) {
+        const ctx = Prisma.getExtensionContext(this);
+        return (ctx as any).findFirst({ where: { email } });
+      },
+    },
+  },
+});
+```
+
+And apply the extension. On Prisma 7 the `PrismaClient` constructor requires a
+driver adapter:
+
+```ts
+import { PrismaClient } from './generated/prisma/client';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { UsersExtension } from './models/Users';
+
+const adapter = new PrismaBetterSqlite3({ url: 'file:./dev.db' });
+export const prisma = new PrismaClient({ adapter }).$extends(UsersExtension);
+
+// now available on the model, fully typed
+await prisma.user.findByEmail('someone@example.com');
+```
+
+Run `npx prisma generate` again as often as you like. Your `findByEmail` stays.
+
+## Regeneration is safe
+
+Earlier versions deleted the entire output directory on every run. For a tool
+whose output exists to hold hand-written code, that made it unusable: your
+methods were destroyed each time you ran `prisma generate`, along with any
+unrelated file that happened to live in that directory.
+
+The generator now keeps a small manifest, `.prisma-custom-models.json`, in the
+output directory. It records a hash of every file the generator wrote. That is
+enough to tell your work apart from its own:
+
+| Situation | What happens |
+| --- | --- |
+| File does not exist | Created |
+| File exists, generator wrote it, you have not edited it | Rewritten if the scaffold changed |
+| File exists, generator wrote it, **you edited it** | **Left alone**, and the run says so |
+| File exists, generator never wrote it | Left alone |
+| Model deleted from your schema, scaffold untouched | Removed |
+| Model deleted from your schema, scaffold edited | Kept, and the run says so |
+
+Two rules follow from that, and they hold by default:
+
+- The generator only writes a file it created and you have not edited.
+- The generator only deletes a file it created and you have not edited.
+
+Commit `.prisma-custom-models.json` along with your models. Without it the
+generator cannot recognise its own past output, so it falls back to the safest
+possible reading: everything already on disk belongs to you, and nothing gets
+overwritten.
+
+To get a fresh scaffold for one model, delete the file and regenerate. To
+overwrite everything, set `force = "true"`.
+
+## Behaviors
+
+### `EXTEND_CLIENT` (recommended)
+
+A Prisma Client extension. This is the approach Prisma recommends, and the only
+one where your methods appear directly on `prisma.user`.
+
+```ts
+import { Prisma } from "../generated/prisma/client";
+
+export const UsersExtension = Prisma.defineExtension({
+  name: 'Users',
+  model: {
+    user: {
+      // define methods here, comma-separated
+    },
+  },
+});
+```
+
+`Prisma.defineExtension` type-checks the extension on its own, without needing a
+client instance, which is why it is what gets emitted.
+
+### `WRAP` (default)
+
+A class that wraps a single model delegate.
+
+```ts
+import type { PrismaClient } from "../generated/prisma/client";
+
+export class Users {
+  constructor(private readonly prismaUser: PrismaClient['user']) {
+  }
+}
+```
+
+```ts
+const users = new Users(prisma.user);
+```
+
+### `EXTEND`
+
+`Object.assign` onto a model delegate. Your methods sit next to the built-in
+ones on the returned object.
+
+```ts
+import type { PrismaClient } from "../generated/prisma/client";
 
 export function Users(prismaUser: PrismaClient['user']) {
   return Object.assign(prismaUser, {
@@ -97,32 +271,61 @@ export function Users(prismaUser: PrismaClient['user']) {
 }
 ```
 
-or this
-
 ```ts
-import { PrismaClient } from '@prisma/client';
-
-export class Users {
-  constructor(private readonly prismaUser: PrismaClient['user']) {}
-}
+const users = Users(prisma.user);
+await users.findMany();
 ```
 
-# Additional Options
+`WRAP` remains the default so that existing schemas keep generating what they
+generated before.
 
-| Option     |  Description                                               | Type               |  Default      |
-| ---------- | ---------------------------------------------------------- | ------------------ | ------------- |
-| `output`   | Output directory for the generated routers and zod schemas | `string`           | `./generated` |
-| `behavior` | Sets the preferred grouping logic                          | `WRAP` or `EXTEND` | `WRAP`        |
+## Options
 
-Use additional options in the `schema.prisma`
+| Option | Description | Type | Default |
+| --- | --- | --- | --- |
+| `output` | Directory the model files are written to | `string` | `./generated` |
+| `behavior` | Which of Prisma's three approaches to emit | `WRAP`, `EXTEND` or `EXTEND_CLIENT` | `WRAP` |
+| `force` | Overwrite files even if you have edited them | `"true"` or `"false"` | `"false"` |
 
 ```prisma
 generator custom_models {
-  provider       = "prisma-custom-models-generator"
-  behavior       = "EXTEND"
+  provider = "prisma-custom-models-generator"
+  output   = "../src/models"
+  behavior = "EXTEND_CLIENT"
+  force    = "false"
 }
 ```
 
-# Community
+### Model names that collide
+
+File names come from pluralising the model name, so a schema containing both
+`Setting` and `Settings` maps two models onto one `Settings.ts`. Other pairs
+that collide the same way: `User`/`Users`, `Person`/`People`, `Datum`/`Data`.
+
+Generation fails with an error naming the models involved. Rename one of them to
+proceed. Earlier versions wrote both models to the one path and kept whichever
+came last, so one of your models silently had no scaffold at all.
+
+## Development
+
+```bash
+npm install
+npm run build       # tsc -> ./lib
+npm run typecheck   # tsc --noEmit
+npm run lint        # prettier --check
+npm test            # vitest run
+npm run gen         # build, then run prisma generate on the fixture schema
+```
+
+`scripts/verify-package.sh` is the check that matters before publishing. It
+builds the package, `npm pack`s it, installs the tarball into an empty project,
+runs `npx prisma generate`, hand-edits a scaffold, regenerates, and asserts the
+edit survived and the result still type-checks:
+
+```bash
+./scripts/verify-package.sh
+```
+
+## Community
 
 [![Stargazers repo roster for @omar-dulaimi/prisma-custom-models-generator](https://reporoster.com/stars/omar-dulaimi/prisma-custom-models-generator)](https://github.com/omar-dulaimi/prisma-custom-models-generator/stargazers)

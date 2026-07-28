@@ -1,15 +1,22 @@
+// Fixture schema used to exercise this generator locally.
+//
+// Run `npm run gen` (build + `prisma generate`) after changing it.
+// Note there is no `url` in the datasource block: Prisma 7 rejects it and
+// expects the connection URL in prisma.config.ts instead.
+
 generator client {
-    provider = "prisma-client-js"
+    provider = "prisma-client"
+    output   = "../prisma/generated/client"
 }
 
 generator custom_models {
     provider = "node ./lib/generator.js"
-    behavior = "WRAP"
+    output   = "../prisma/generated/models"
+    behavior = "EXTEND_CLIENT"
 }
 
 datasource db {
     provider = "sqlite"
-    url      = "file:./dev.db"
 }
 
 model User {

@@ -1,6 +1,9 @@
 node_modules
 lib
 package
+*.tgz
 npm-debug.log*
+
+# Fixture output from `npm run gen`
 prisma/generated
-prisma/shield
+prisma/dev.db*
