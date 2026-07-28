@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Nothing is published unless the whole of CI, including the job that installs
+  # the packed tarball into an empty project and runs it, passed on this commit.
+  verify:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      # Required. The npm account disallows tokens, so the only way to publish is
+      # for npm to request a GitHub OIDC token and exchange it with the registry
+      # for a short-lived credential. Without this permission there is no token
+      # to request and nothing to fall back on.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Node 24 is load-bearing: the OIDC exchange needs npm >= 11.5.1 and Node
+      # 22 still ships npm 10. Deliberately no `registry-url`, because that
+      # writes an .npmrc with an authToken placeholder that gets in the way of
+      # the exchange.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24.x'
+          cache: npm
+
+      - name: Assert this npm can do the OIDC exchange
+        run: |
+          set -euo pipefail
+          node - <<'JS'
+          const { execFileSync } = require('node:child_process');
+          const version = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim();
+          const [major, minor, patch] = version.split('.').map(Number);
+          const ok =
+            major > 11 ||
+            (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+          if (!ok) {
+            console.log(`::error::npm ${version} cannot exchange an OIDC token for a publish credential. Need >= 11.5.1, which Node 24 bundles.`);
+            process.exit(1);
+          }
+          console.log(`npm ${version} supports trusted publishing.`);
+          JS
+
+      - run: npm ci
+
+      - name: Assert exactly one @semantic-release/npm, at v13 or later
+        # semantic-release 24 depends on @semantic-release/npm ^12, and a nested
+        # v12 shadows the hoisted v13 while looking perfectly healthy. v12 has no
+        # OIDC support, so the release would fall back to the token path and fail
+        # or, worse, silently publish through it.
+        run: |
+          set -euo pipefail
+          NESTED="$(find node_modules -path '*/node_modules/@semantic-release/npm/package.json' -print)"
+          if [ -n "$NESTED" ]; then
+            echo "::error::nested copies of @semantic-release/npm shadow the hoisted one: $NESTED"
+            exit 1
+          fi
+          VERSION="$(node -p "JSON.parse(require('fs').readFileSync('node_modules/@semantic-release/npm/package.json','utf8')).version")"
+          MAJOR="${VERSION%%.*}"
+          if [ "$MAJOR" -lt 13 ]; then
+            echo "::error::@semantic-release/npm $VERSION predates OIDC publishing; need >= 13."
+            exit 1
+          fi
+          echo "@semantic-release/npm $VERSION, single copy."
+
+      # ./package is what gets published, and @semantic-release/npm reads its
+      # package.json during verifyConditions, before any prepare step runs. So it
+      # has to be on disk already. package.sh runs again during prepare, once the
+      # version has been bumped.
+      - name: Build the publishable package
+        run: npm run package:build
+
+      # No NPM_TOKEN: every token on this account is dead by policy, and setting
+      # one here would write a conflicting .npmrc. GITHUB_TOKEN is still needed
+      # for the release commit, the tag and the GitHub release.
+      - name: Semantic release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release

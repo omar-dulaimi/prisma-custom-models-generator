@@ -5,15 +5,31 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  # release.yml calls this workflow, so a publish can only happen from a commit
+  # where every job below went green.
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
+    name: source (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        node: ['20.19', '22', '24']
-    name: node ${{ matrix.node }}
+        # Node 20 went end-of-life in April 2026 and is deliberately not here.
+        # The dev toolchain no longer runs on it either: semantic-release 25
+        # requires ^22.14 || >= 24.10, and prisma 7 pulls in a transitive
+        # dependency that wants >= 22. `engines` still advertises ^20.19 for
+        # Prisma 6 consumers; nothing in this repo verifies that any more.
+        node: ['22', '24']
     steps:
       - uses: actions/checkout@v5
 
@@ -29,34 +45,46 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-      # The check that matters. Both defects fixed in 0.2.0 shipped for years
-      # while the steps above would have passed, because they exercise the
-      # source tree and a consumer installs a tarball. This builds the package,
-      # packs it, installs it into an empty project, runs `prisma generate`,
-      # hand-edits a scaffold, regenerates, and asserts the edit survived.
-      - name: verify the packaged artifact (prisma 7)
-        run: ./scripts/verify-package.sh
-        env:
-          PRISMA_VERSION: 7.9.1
-
-  prisma-6:
+  pack:
+    # The check that matters, and the gate on the release. Both defects fixed in
+    # the Prisma 7 rewrite shipped for years while the source-tree jobs above
+    # would have passed, because those exercise ./src with the repo's own
+    # node_modules on hand and a consumer installs a tarball. This builds the
+    # package, packs it, installs it into an empty project outside the repo, runs
+    # the README's headline command, hand-edits a scaffold, regenerates, and
+    # asserts the edit survived and the generated code still typechecks against
+    # the real client.
+    name: packaged artifact (node ${{ matrix.node }}, prisma ${{ matrix.prisma }})
     runs-on: ubuntu-latest
-    name: prisma 6 compatibility
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+        # One codebase serves both majors because the generator reads the
+        # datamodel out of the options Prisma hands it instead of parsing the
+        # schema with its own bundled copy of Prisma. That claim is only true for
+        # as long as both of these stay green.
+        prisma: ['7.9.1', '6.19.3']
+    env:
+      PRISMA_VERSION: ${{ matrix.prisma }}
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - run: npm ci
-      - run: npm run build
 
-      # One codebase supports both majors because the generator reads the
-      # datamodel out of the options Prisma hands it instead of parsing the
-      # schema with its own bundled copy of Prisma.
-      - name: verify the packaged artifact (prisma 6)
-        run: ./scripts/verify-package.sh
-        env:
-          PRISMA_VERSION: 6.19.3
+      - name: Pack, install into an empty project, run it
+        run: ./scripts/verify-package.sh "${{ runner.temp }}/consumer"
+
+      - name: Negative control, a broken package must fail the check above
+        # A packaging check that cannot go red is not evidence. This breaks the
+        # installed package on purpose, twice, and fails if either sabotaged run
+        # still passes. It has already earned its keep: it caught the survival
+        # assertion matching the scaffold's own doc comment, which meant that
+        # assertion could never fail.
+        run: ./scripts/negative-control.sh "${{ runner.temp }}/negative-control"

@@ -17,6 +17,11 @@
 # Usage:
 #   scripts/verify-package.sh [workdir]
 #   PRISMA_VERSION=6.19.3 scripts/verify-package.sh [workdir]
+#   SABOTAGE=clobber-edits scripts/verify-package.sh [workdir]
+#
+# `SABOTAGE` damages the installed package on purpose so the assertions below
+# have to trip. scripts/negative-control.sh drives it and fails if they do not.
+# See that script for why.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,6 +31,15 @@ PRISMA_MAJOR="${PRISMA_VERSION%%.*}"
 
 say() { printf '\n=== %s ===\n' "$1"; }
 fail() { printf '\nFAIL: %s\n' "$1" >&2; exit 1; }
+
+# The workdir is `rm -rf`d below, and the script cds around, so resolve it once
+# against the caller's cwd and refuse anything that would eat the repo.
+case "$WORK" in /*) ;; *) WORK="$PWD/$WORK" ;; esac
+case "$WORK" in
+'' | / | "$ROOT" | "$ROOT"/*)
+  fail "refusing to use $WORK as the throwaway workdir; it must be outside $ROOT"
+  ;;
+esac
 
 say "node $(node --version), npm $(npm --version), prisma ${PRISMA_VERSION}"
 
@@ -133,8 +147,46 @@ model Post {
 PRISMA
 fi
 
+# Note for anyone reasoning about the run below: on Prisma 6 this install has a
+# side effect, because @prisma/client 6 still runs `prisma generate` from its own
+# postinstall. So by the time the explicit run happens, the scaffolds and the
+# manifest may already exist, written by the tarball we just installed. Prisma 7
+# dropped that postinstall.
 npm install --no-audit --no-fund --silent \
   "prisma@${PRISMA_VERSION}" "@prisma/client@${PRISMA_VERSION}" "$TARBALL"
+
+INSTALLED="$WORK/node_modules/prisma-custom-models-generator"
+
+# Deliberate sabotage of the INSTALLED package, for the negative control only.
+# Each mode mirrors a defect that really shipped somewhere in this family of
+# generators, and each must make one of the assertions below fail. If a mode
+# cannot find what it means to break it says so and exits non-zero, so a stale
+# mode can never quietly turn the negative control into a no-op.
+case "${SABOTAGE:-}" in
+'') ;;
+missing-lib-file)
+  say "SABOTAGE missing-lib-file: dropping lib/manifest.js from the installed package"
+  test -f "$INSTALLED/lib/manifest.js" \
+    || fail "sabotage did not apply: lib/manifest.js is not in the installed package"
+  rm -f "$INSTALLED/lib/manifest.js"
+  ;;
+clobber-edits)
+  say "SABOTAGE clobber-edits: blinding the reconciler to files already on disk"
+  python3 - "$INSTALLED/lib/writer.js" <<'PY'
+import pathlib, sys
+target = pathlib.Path(sys.argv[1])
+source = target.read_text()
+needle = 'const existing = await readIfExists(filePath);'
+if needle not in source:
+    sys.exit('sabotage did not apply: the reconciler no longer reads the file it '
+             'is about to write, so this mode needs updating')
+target.write_text(source.replace(needle, 'const existing = null; // sabotaged'))
+PY
+  ;;
+*)
+  fail "unknown SABOTAGE mode: ${SABOTAGE}"
+  ;;
+esac
 
 say "advisories in the installed consumer tree"
 npm audit 2>&1 | tail -3 || true
@@ -164,14 +216,20 @@ else
 fi
 
 say "seeding hand-written code and unrelated files"
+# The seeded method carries a sentinel. Without it the survival check below is
+# vacuous: the scaffold's own doc comment shows `findByEmail` as the example, so
+# grepping for the method name matches a freshly clobbered file just as happily
+# as a preserved one. The negative control caught exactly that.
 python3 - <<'PY'
 import pathlib
 p = pathlib.Path('src/models/Users.ts')
 s = p.read_text()
 marker = "      // define methods here, comma-separated\n"
 assert marker in s, "scaffold marker not found; cannot seed hand-written code"
+assert 'HAND_WRITTEN_SENTINEL' not in s, "sentinel must not occur in the scaffold"
 p.write_text(s.replace(
     marker,
+    "      // HAND_WRITTEN_SENTINEL: proof these exact bytes survived.\n"
     "      async findByEmail(email: string) {\n"
     "        const ctx = Prisma.getExtensionContext(this);\n"
     "        return (ctx as any).findFirst({ where: { email } });\n"
@@ -189,8 +247,11 @@ grep -q "kept your edits" generate-2.log \
   || fail "generator did not report preserving the edit"
 
 say "asserting survival"
-grep -q "findByEmail" src/models/Users.ts \
+grep -q "HAND_WRITTEN_SENTINEL" src/models/Users.ts \
   || fail "REGRESSION: hand-written method was destroyed"
+if grep -q "define methods here, comma-separated" src/models/Users.ts; then
+  fail "REGRESSION: the pristine scaffold was written back over the edited file"
+fi
 test -f src/models/unrelated.ts   || fail "REGRESSION: unrelated.ts deleted"
 test -f src/models/nested/deep.ts || fail "REGRESSION: nested/deep.ts deleted"
 test -f src/models/NOTES.md       || fail "REGRESSION: NOTES.md deleted"

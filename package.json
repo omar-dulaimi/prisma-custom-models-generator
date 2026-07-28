@@ -17,7 +17,8 @@
     "test": "vitest run",
     "gen": "npm run build && prisma generate",
     "package:build": "./package.sh",
-    "package:publish": "./package.sh && cd package && npm publish"
+    "package:publish": "./package.sh && cd package && npm publish",
+    "release": "semantic-release"
   },
   "author": {
     "name": "Omar Dulaimi",
@@ -41,10 +42,19 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/node": "^22.15.3",
     "@types/pluralize": "^0.0.33",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
     "prettier": "^3.6.2",
     "prisma": "^7.9.1",
+    "semantic-release": "^25.0.8",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },

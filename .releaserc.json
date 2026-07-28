@@ -1,0 +1,84 @@
+{
+  "branches": ["master"],
+  "//repositoryUrl": "Set explicitly. package.json carries the bare `https://github.com/...` form, and @semantic-release/github has been seen parsing npm's `git+https://` variant into an empty $owner, at which point its fail step dies with 'Variable $owner of type String! was provided invalid value' and masks the real error.",
+  "repositoryUrl": "https://github.com/omar-dulaimi/prisma-custom-models-generator.git",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          { "type": "feat", "release": "minor" },
+          { "type": "fix", "release": "patch" },
+          { "type": "perf", "release": "patch" },
+          { "type": "revert", "release": "patch" },
+          { "type": "refactor", "release": "patch" },
+          { "type": "docs", "release": false },
+          { "type": "style", "release": false },
+          { "type": "chore", "release": false },
+          { "type": "test", "release": false },
+          { "type": "build", "release": false },
+          { "type": "ci", "release": false },
+          { "scope": "breaking", "release": "major" }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            { "type": "feat", "section": "🚀 Features" },
+            { "type": "fix", "section": "🐛 Bug Fixes" },
+            { "type": "perf", "section": "⚡ Performance Improvements" },
+            { "type": "revert", "section": "⏪ Reverts" },
+            { "type": "refactor", "section": "♻️ Code Refactoring" },
+            { "type": "docs", "section": "📚 Documentation", "hidden": false },
+            { "type": "style", "section": "💄 Styles", "hidden": true },
+            {
+              "type": "chore",
+              "section": "🔧 Miscellaneous Chores",
+              "hidden": true
+            },
+            { "type": "test", "section": "✅ Tests", "hidden": true },
+            { "type": "build", "section": "🏗️ Build System", "hidden": true },
+            { "type": "ci", "section": "👷 CI/CD", "hidden": true }
+          ]
+        }
+      }
+    ],
+    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
+    [
+      "@semantic-release/exec",
+      {
+        "//": "MUST stay above @semantic-release/npm. package.sh rebuilds package/package.json from the root manifest, so if it ran after the npm plugin it would overwrite the version the npm plugin just wrote and publish the stale one. Bumping the root manifest first is what keeps the repo, the tarball and the tag on the same number.",
+        "prepareCmd": "npm version ${nextRelease.version} --no-git-tag-version --allow-same-version && ./package.sh"
+      }
+    ],
+    [
+      "@semantic-release/npm",
+      {
+        "//": "The repo root is `private: true` on purpose, so only ./package is publishable. It has to exist before verifyConditions, which is why the workflow runs `npm run package:build` before semantic-release.",
+        "pkgRoot": "package"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["package.json", "package-lock.json", "CHANGELOG.md"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "successComment": "🎉 Released in [v${nextRelease.version}](https://www.npmjs.com/package/prisma-custom-models-generator/v/${nextRelease.version}).",
+        "//": "No failure issue: the workflow run already reports it, and this plugin's own fail step has been the thing that erased the real error message on repos here.",
+        "failComment": false,
+        "failTitle": false,
+        "labels": ["released"]
+      }
+    ]
+  ]
+}
