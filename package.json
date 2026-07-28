@@ -1,6 +1,6 @@
 {
   "name": "prisma-custom-models-generator",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Prisma generator that scaffolds custom models from your schema, without overwriting your code",
   "repository": "https://github.com/omar-dulaimi/prisma-custom-models-generator",
   "bin": {
