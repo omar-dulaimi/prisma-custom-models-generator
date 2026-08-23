@@ -7,7 +7,7 @@
     "prisma-custom-models-generator": "lib/generator.js"
   },
   "scripts": {
-    "start": "tsc && npx prisma generate",
+    "start": "tsc && node ./lib/index.js",
     "package:publish": "./package.sh && cd package && npm publish"
   },
   "author": {
@@ -27,6 +27,7 @@
     "@prisma/generator-helper": "^4.0.0",
     "@prisma/internals": "^4.0.0",
     "pluralize": "^8.0.0",
+    "prisma-class-validator-generator": "^0.2.1",
     "ts-morph": "^15.1.0",
     "tslib": "^2.4.0",
     "zod": "^3.17.3"

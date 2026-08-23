@@ -1,10 +1,15 @@
 generator client {
     provider = "prisma-client-js"
+      binaryTargets = ["native", "linux-musl"]
 }
 
 generator custom_models {
     provider = "node ./lib/generator.js"
     behavior = "WRAP"
+}
+
+generator class_validator {
+  provider = "prisma-class-validator-generator"
 }
 
 datasource db {
